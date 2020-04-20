@@ -17,7 +17,7 @@ public class Client {
 		//initializer
 	}
 	
-	public void requestFile(String addr, String rType, String transferMode,String fileName) {
+	public void requestFile(String addr, boolean getting, String transferMode,String fileName) {
 		//this will be called from TFTP.java as the 'run' method
 		//setup options and special varibles beforehand, then call this method
 		try {
@@ -30,10 +30,10 @@ public class Client {
 			byte[] tmode = transferMode.getBytes();
 			
 			
-			if(rType.equalsIgnoreCase("Get")) {
+			if(getting) {
 				opcode = new byte[] {0,1};
 			}
-			else {
+			else { //putting a file instead of getting
 				opcode = new byte[]{0,2};
 			}
 			
