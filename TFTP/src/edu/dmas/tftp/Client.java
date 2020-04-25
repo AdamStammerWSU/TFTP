@@ -9,24 +9,35 @@ import java.util.Arrays;
 
 public class Client {
 	
+	private String host, transferMode;
+	private boolean getting;
 	
 	
 	
-	
-	public Client() {
-		//initializer
+	public Client(String addr, boolean getting, String transferMode) {
+		this.host = addr;
+		this.transferMode = transferMode;
+		this.getting = getting;
 	}
 	
-	public void requestFile(String addr, boolean getting, String transferMode,String fileName) {
+	public boolean requestFile(String source, String destination) {
 		//this will be called from TFTP.java as the 'run' method
-		//setup options and special varibles beforehand, then call this method
+		//setup options and special variables beforehand with the initializer, then call this method
+		if(getting) {
+			return requestFilePull(source, destination);
+		} else {
+			return requestFilePush(source, destination);
+		}
+	}
+	
+	private boolean requestFilePull(String source, String destination) {
 		try {
 			DatagramSocket socket = new DatagramSocket();
 			
 			//Test comment
 			
 			byte[] opcode;
-			byte[] fname = fileName.getBytes();
+			byte[] fname = source.getBytes();
 			byte[] tmode = transferMode.getBytes();
 			
 			
@@ -51,17 +62,11 @@ public class Client {
 				else if(i == fname.length + 2) {
 					
 					
-					
-					
 				}
-				
 				
 			}
 			
-			
-			InetAddress address = InetAddress.getByName(addr);
-			
-			
+			InetAddress address = InetAddress.getByName(host);
 			
 			
 		} catch (SocketException e) {
@@ -72,10 +77,15 @@ public class Client {
 			e.printStackTrace();
 		}
 		
+		return true; //return true if succeeded, false if failed
+	}
+	
+	private boolean requestFilePush(String source, String destination) {
+		//open the local file
 		
+		//send 
 		
-		
-		
+		return true; //return true if succeeded, false if failed
 	}
 
 }

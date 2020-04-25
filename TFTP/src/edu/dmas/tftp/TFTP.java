@@ -23,6 +23,12 @@ public class TFTP {
 				printHelp();
 				exit(false);
 			}
+			if (s.contentEquals("-i")) {
+				System.out
+						.println(" Binary Transfer ('-i') not yet implemented. Please try again without binary mode.");
+				printHelp();
+				exit(false);
+			}
 		}
 
 		if (args.length < 3) {
@@ -63,6 +69,9 @@ public class TFTP {
 				destination = source;
 			}
 		}
+
+		Client client = new Client(host, getting, "netascii"); // initialize client with netascii transfer mode
+		client.requestFile(source, destination);
 	}
 
 	public static void printHelp() {
@@ -94,6 +103,15 @@ public class TFTP {
 		}
 		System.out.println("...");
 		System.exit(0);
+	}
+
+	private byte[] concat(byte[] a, byte[] b) {
+		// returns a byte array of b concatenated onto the end of a
+		// [a1, a2, a3, ..., an, b1, b2, b3, ..., bn]
+		byte[] c = new byte[a.length + b.length];
+		System.arraycopy(a, 0, c, 0, a.length);
+		System.arraycopy(b, 0, c, a.length, b.length);
+		return c;
 	}
 
 	public static boolean ipv4FormatCheck(String address) {
