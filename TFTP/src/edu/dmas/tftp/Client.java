@@ -7,6 +7,7 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 public class Client {
 
@@ -28,7 +29,8 @@ public class Client {
 	private String address, transferMode;
 	private boolean getting;
 	private InetAddress host;
-	private int nextSendPort = 69, nextRecPort = 69;;
+	private int nextSendPort = 69, nextRecPort = 69;
+	private DatagramPacket inboundPacket;
 
 	public Client(String addr, boolean getting, String transferMode) {
 		this.address = addr;
@@ -71,16 +73,42 @@ public class Client {
 			// debug check of the byte array, it matches wireshark capture
 			// System.out.println(bytesToHex(buf));
 
-			sendBuffer(socket, buf, 69); // build the request packet
+			sendBuffer(socket, buf, 69); // send the request packet on port 69
 
-			// now we need to receive the data
-			DatagramPacket pack = receivePacket(socket);
-			nextSendPort = pack.getPort();
-			String received = new String(pack.getData(), 0, pack.getLength()); // if buf == 00 at this point, it is a
-																				// null packet
-			System.out.println(bytesToHex(received.getBytes()));
+			// now we need to receive the data until it is done
+			boolean moreData = true;
+			byte[] blockNumber = new byte[] { 0, 0 };
+			byte[] dataBlock = new byte[] { 0, 0 };
+			while (moreData) {
+				buf = receivePacket(socket);
+				// String received = new String(buf, 0, buf.length);
+				// System.out.println(received);
+				// System.out.println(bytesToHex(received.getBytes()));
 
-			sendBuffer(socket, concat(OP.ACK.code(), new byte[] { 0, 1 }), nextSendPort);
+				// split data by useful pieces
+				opcode = Arrays.copyOfRange(buf, 0, 2);
+				if (Arrays.equals(opcode, OP.DATA.code())) {
+					// it is a data packet
+					// grab the block number
+					blockNumber = Arrays.copyOfRange(buf, 2, 4);
+
+					// grab data out of the buffer
+					dataBlock = Arrays.copyOfRange(buf, 4, buf.length);
+
+					// check its size to determine if there is more data
+					System.out.println(dataBlock.length);
+					moreData = false;
+
+					// save the data to file
+
+					// and acknowledge that block
+					sendBuffer(socket, concat(OP.ACK.code(), blockNumber), inboundPacket.getPort());
+				} else {
+					// send an error because we expected a data packet
+
+				}
+
+			}
 
 //			byte[] buf = new byte[4 + fname.length + tmode.length];
 //			for (int i = 0; i < buf.length; i++) {
@@ -110,6 +138,9 @@ public class Client {
 
 	private void sendBuffer(DatagramSocket socket, byte[] buf, int port) {
 		try {
+			if (port == -1) {
+				port = inboundPacket.getPort();
+			}
 			socket.send(new DatagramPacket(buf, buf.length, host, port));
 		} catch (IOException e) {
 			System.out.println("Failed to send on socket.");
@@ -117,22 +148,20 @@ public class Client {
 		}
 	}
 
-	private DatagramPacket receivePacket(DatagramSocket socket) {
+	private byte[] receivePacket(DatagramSocket socket) {
 		// initialize packet that can be recognized as 'null'
 		// it should never be sent anywhere
-		byte[] buf = new byte[1024];
-		DatagramPacket packet = new DatagramPacket(buf, buf.length, host, socket.getLocalPort());
-		nextSendPort = packet.getPort();
+		byte[] buf = new byte[532];
+		Arrays.fill(buf, "\n".getBytes()[0]); // new byte[1024];
+		inboundPacket = new DatagramPacket(buf, buf.length, host, socket.getLocalPort());
 		try {
-			socket.receive(packet);
-			String received = new String(packet.getData(), 0, packet.getLength());
-			System.out.println(received);
+			socket.receive(inboundPacket);
 		} catch (IOException e) {
 			System.out.println("Error receiving packet.");
 			e.printStackTrace();
 			TFTP.exit(true);
 		}
-		return packet;
+		return inboundPacket.getData();
 	}
 
 	private byte[] RQconcat(byte[] opcode, byte[] fname, byte[] tmode) {
