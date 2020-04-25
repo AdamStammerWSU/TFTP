@@ -1,5 +1,7 @@
 package edu.dmas.tftp;
 
+import java.io.IOException;
+import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
@@ -26,6 +28,7 @@ public class Client {
 	private String address, transferMode;
 	private boolean getting;
 	private InetAddress host;
+	private int nextSendPort = 69, nextRecPort = 69;;
 
 	public Client(String addr, boolean getting, String transferMode) {
 		this.address = addr;
@@ -54,18 +57,30 @@ public class Client {
 	private boolean requestFilePull(String source, String destination) {
 		try {
 			DatagramSocket socket = new DatagramSocket();
+			DatagramPacket packet;
 
 			// Test comment
 
-			byte[] opcode = OP.RRQ.code();
-			byte[] fname = source.getBytes();
-			byte[] tmode = transferMode.getBytes();
+			byte[] opcode = OP.RRQ.code(); // request op code
+			byte[] fname = source.getBytes(); // get file name bytes
+			byte[] tmode = transferMode.getBytes(); // get transfer mode bytes
 
 			// this "should" concatenate all of the pieces together for the get request
 			byte[] buf = RQconcat(opcode, fname, tmode);
 
 			// debug check of the byte array, it matches wireshark capture
-			System.out.println(bytesToHex(buf));
+			// System.out.println(bytesToHex(buf));
+
+			sendBuffer(socket, buf, 69); // build the request packet
+
+			// now we need to receive the data
+			DatagramPacket pack = receivePacket(socket);
+			nextSendPort = pack.getPort();
+			String received = new String(pack.getData(), 0, pack.getLength()); // if buf == 00 at this point, it is a
+																				// null packet
+			System.out.println(bytesToHex(received.getBytes()));
+
+			sendBuffer(socket, concat(OP.ACK.code(), new byte[] { 0, 1 }), nextSendPort);
 
 //			byte[] buf = new byte[4 + fname.length + tmode.length];
 //			for (int i = 0; i < buf.length; i++) {
@@ -76,8 +91,8 @@ public class Client {
 //			}
 
 		} catch (SocketException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			System.out.println("Error opening socket.");
+			TFTP.exit(true);
 		}
 
 		return true; // return true if succeeded, false if failed
@@ -86,9 +101,38 @@ public class Client {
 	private boolean requestFilePush(String source, String destination) {
 		// open the local file
 
+		// request put
+
 		// send
 
 		return true; // return true if succeeded, false if failed
+	}
+
+	private void sendBuffer(DatagramSocket socket, byte[] buf, int port) {
+		try {
+			socket.send(new DatagramPacket(buf, buf.length, host, port));
+		} catch (IOException e) {
+			System.out.println("Failed to send on socket.");
+			TFTP.exit(true);
+		}
+	}
+
+	private DatagramPacket receivePacket(DatagramSocket socket) {
+		// initialize packet that can be recognized as 'null'
+		// it should never be sent anywhere
+		byte[] buf = new byte[1024];
+		DatagramPacket packet = new DatagramPacket(buf, buf.length, host, socket.getLocalPort());
+		nextSendPort = packet.getPort();
+		try {
+			socket.receive(packet);
+			String received = new String(packet.getData(), 0, packet.getLength());
+			System.out.println(received);
+		} catch (IOException e) {
+			System.out.println("Error receiving packet.");
+			e.printStackTrace();
+			TFTP.exit(true);
+		}
+		return packet;
 	}
 
 	private byte[] RQconcat(byte[] opcode, byte[] fname, byte[] tmode) {
