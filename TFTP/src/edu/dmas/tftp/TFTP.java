@@ -45,15 +45,12 @@ public class TFTP {
 				printHelp();
 				exit(false);
 			}
-			System.out.println(host);
 
 			// check for get/put
 			if (args[1].equalsIgnoreCase("get")) {
 				getting = true; // we are getting a file
-				System.out.println("getting");
 			} else if (args[1].equalsIgnoreCase("put")) {
 				getting = false; // so we are putting
-				System.out.println("putting");
 			} else {
 				// neither get nor put so exit with error after printing help
 				System.out.println("Unspecified [GET | PUT]");
@@ -71,7 +68,17 @@ public class TFTP {
 		}
 
 		Client client = new Client(host, getting, "netascii"); // initialize client with netascii transfer mode
-		client.requestFile(source, destination);
+		if (destination.contentEquals(""))
+			destination = source;
+
+		if (getting)
+			System.out.println("Requesting " + source + " from " + host + " as " + destination);
+		else
+			System.out.println("Pushing " + source + " to " + host + " as " + destination);
+
+		if (client.requestFile(source, destination)) {
+			System.out.println("Success!");
+		}
 	}
 
 	public static void printHelp() {

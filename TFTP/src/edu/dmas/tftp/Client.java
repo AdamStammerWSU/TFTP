@@ -1,5 +1,7 @@
 package edu.dmas.tftp;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -11,6 +13,7 @@ import java.util.Arrays;
 
 public class Client {
 
+	// setup enum for op codes
 	private enum OP {
 		RRQ(new byte[] { 0, 1 }), WRQ(new byte[] { 0, 2 }), DATA(new byte[] { 0, 3 }), ACK(new byte[] { 0, 4 }),
 		ERROR(new byte[] { 0, 5 }), ZERO(new byte[] { 0 });
@@ -29,10 +32,10 @@ public class Client {
 	private String address, transferMode;
 	private boolean getting;
 	private InetAddress host;
-	private int nextSendPort = 69, nextRecPort = 69;
 	private DatagramPacket inboundPacket;
 
 	public Client(String addr, boolean getting, String transferMode) {
+		// initialize local variables with arguments
 		this.address = addr;
 		this.transferMode = transferMode;
 		this.getting = getting;
@@ -59,7 +62,6 @@ public class Client {
 	private boolean requestFilePull(String source, String destination) {
 		try {
 			DatagramSocket socket = new DatagramSocket();
-			DatagramPacket packet;
 
 			// Test comment
 
@@ -70,20 +72,22 @@ public class Client {
 			// this "should" concatenate all of the pieces together for the get request
 			byte[] buf = RQconcat(opcode, fname, tmode);
 
-			// debug check of the byte array, it matches wireshark capture
-			// System.out.println(bytesToHex(buf));
-
 			sendBuffer(socket, buf, 69); // send the request packet on port 69
 
 			// now we need to receive the data until it is done
 			boolean moreData = true;
-			byte[] blockNumber = new byte[] { 0, 0 };
-			byte[] dataBlock = new byte[] { 0, 0 };
+			byte[] blockNumber = new byte[] { 0, 0 }; // which block are we on
+			byte[] dataBlock = new byte[] { 0, 0 }; // what is in the datablock
+			BufferedWriter writer = null; // writer for local file
+			try {
+				writer = new BufferedWriter(new FileWriter(destination)); // open up the writer
+			} catch (IOException e) {
+				System.out.println("Failed to open the destination file locally.");
+				TFTP.exit(true);
+			}
 			while (moreData) {
+				// read the next packet
 				buf = receivePacket(socket);
-				// String received = new String(buf, 0, buf.length);
-				// System.out.println(received);
-				// System.out.println(bytesToHex(received.getBytes()));
 
 				// split data by useful pieces
 				opcode = Arrays.copyOfRange(buf, 0, 2);
@@ -96,10 +100,25 @@ public class Client {
 					dataBlock = Arrays.copyOfRange(buf, 4, buf.length);
 
 					// check its size to determine if there is more data
-					System.out.println(dataBlock.length);
-					moreData = false;
+					int dataLength = 0;
+					String asciiBlock = ""; // convert the data to ascii for the file write
+					for (int i = 0; i < dataBlock.length; i++) { // loop through each byte
+						if (dataBlock[i] != (byte) 0b11111111) { // see if it's the 'null' character predefined in the
+																	// read packet buffer
+							dataLength++; // if it's not, increase the length count
+							asciiBlock += (char) dataBlock[i]; // and add it as a character to the string buffer
+						}
+					}
+					if (dataLength < 512) // check the size for more data indication
+						moreData = false;
 
 					// save the data to file
+					try {
+						writer.write(asciiBlock);
+					} catch (IOException e) {
+						System.out.println("Failed to write to local destination file.");
+						TFTP.exit(true);
+					}
 
 					// and acknowledge that block
 					sendBuffer(socket, concat(OP.ACK.code(), blockNumber), inboundPacket.getPort());
@@ -110,13 +129,12 @@ public class Client {
 
 			}
 
-//			byte[] buf = new byte[4 + fname.length + tmode.length];
-//			for (int i = 0; i < buf.length; i++) {
-//				if (i < 2) {
-//				} else if (i > 1 && i <= fname.length + 1) {
-//				} else if (i == fname.length + 2) {
-//				}
-//			}
+			try {
+				writer.close(); // close up the write buffer
+			} catch (IOException e) {
+				System.out.println("Failed to close the destination file writer");
+				TFTP.exit(true);
+			}
 
 		} catch (SocketException e) {
 			System.out.println("Error opening socket.");
@@ -152,7 +170,7 @@ public class Client {
 		// initialize packet that can be recognized as 'null'
 		// it should never be sent anywhere
 		byte[] buf = new byte[532];
-		Arrays.fill(buf, "\n".getBytes()[0]); // new byte[1024];
+		Arrays.fill(buf, (byte) 0b11111111); // new byte[1024];
 		inboundPacket = new DatagramPacket(buf, buf.length, host, socket.getLocalPort());
 		try {
 			socket.receive(inboundPacket);
