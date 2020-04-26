@@ -2,6 +2,13 @@ package edu.dmas.tftp;
 
 import java.util.regex.Pattern;
 
+/*   
+ *  TFTP Client
+ * 		Developed by Dillon McDaniel and Adam Stammer
+ * 		for Adv. Networking and Telecom. at Winona State University
+ * 		April 2020
+ */
+
 public class TFTP {
 
 	// track help prints so it only gets printed once
@@ -41,9 +48,8 @@ public class TFTP {
 			// grab the host address
 			host = args[0];
 			if (!ipv4FormatCheck(host)) {
-				System.out.println("Host must be ipv4 address format [xxx].[xxx].[xxx].[xxx]");
-				printHelp();
-				exit(false);
+				System.out.println("Warning: Host not in ipv4 address format ([xxx].[xxx].[xxx].[xxx]).");
+				// could still be hostname so program will not exit
 			}
 
 			// check for get/put
@@ -69,22 +75,22 @@ public class TFTP {
 
 		Client client = new Client(host, getting, "netascii"); // initialize client with netascii transfer mode
 		if (destination.contentEquals(""))
-			destination = source;
+			destination = source; // if the destination is specified, make it identical to the source file name
 
-		if (getting)
+		if (getting) // tell the user you're starting the transfer
 			System.out.println("Requesting " + source + " from " + host + " as " + destination);
 		else
 			System.out.println("Pushing " + source + " to " + host + " as " + destination);
 
-		if (client.requestFile(source, destination)) {
-			System.out.println("Success!");
+		if (client.requestFile(source, destination)) { // if it works
+			System.out.println("Success!"); // tell the user
 		}
+
+		// end program
 	}
 
 	public static void printHelp() {
-
-		// i think this is all we need
-
+		// only want to print the help message once in a given program run
 		if (!helpPrinted) {
 			System.out.print("\n\n\n");
 			System.out.println("Usage: tftp [options] host [get/put] source [destination]");
@@ -98,12 +104,16 @@ public class TFTP {
 			System.out.println("\t destination -> \t where to transfer the file");
 
 			System.out.println("\t [OPTIONS]   ---------");
+			System.out.println("\t\t -? \tprint this help message");
+			System.out.println("\t\t -h \tprint this help message");
+			System.out.println("\t\t --help \tprint this help message");
 			System.out.println("\t\t -i specefies binary mode (octet) [NOT IMPLEMENTED]");
 			helpPrinted = true;
 		}
 	}
 
 	public static void exit(boolean inProcess) {
+		// close the program with the correct user message
 		System.out.print("System Exiting");
 		if (inProcess) {
 			System.out.print(" while in process");
@@ -113,7 +123,7 @@ public class TFTP {
 	}
 
 	public static boolean ipv4FormatCheck(String address) {
-		return p.matcher(address).matches();
+		return p.matcher(address).matches(); // checks to see if address is in the [xxx].[xxx].[xxx].[xxx] format
 	}
 
 }

@@ -1,21 +1,17 @@
 package edu.dmas.tftp;
 
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
-import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Arrays;
 
 public class Client {
@@ -132,6 +128,9 @@ public class Client {
 				} else {
 					// send an error because we expected a data packet
 
+					// we decided not to implement this because it's quite difficult to test without
+					// a server we have complete control over, like one we coded ourselves. As such
+					// we deemed it outside the scope of this assignment
 				}
 
 			}
@@ -152,104 +151,112 @@ public class Client {
 	}
 
 	private boolean requestFilePush(String source, String destination) {
-		
+
 		// open the local file
 		try {
-			
-			 File Infile = new File(source);
-			 
-			 byte[] filecontent = new byte[(int) Infile.length()];//set the byte array to the length of the file in bytes
-			 
-			 FileInputStream InfileStr = new FileInputStream(Infile);//get the file as an input stream
-			 
-			 
-			 InfileStr.read(filecontent);//read in the files bytes
-			 
-			 //file is no longer needed as bytes are in array
-			 InfileStr.close();
-			 
-			 
+
+			File Infile = new File(source);
+
+			byte[] filecontent = new byte[(int) Infile.length()];// set the byte array to the length of the file in
+																	// bytes
+
+			FileInputStream InfileStr = new FileInputStream(Infile);// get the file as an input stream
+
+			InfileStr.read(filecontent);// read in the files bytes
+
+			// file is no longer needed as bytes are in array
+			InfileStr.close();
+
 			try {
-				
+
 				// request put
 				DatagramSocket socket = new DatagramSocket();
-	
+
 				byte[] opcode = OP.WRQ.code(); // request op code
 				byte[] fname = destination.getBytes(); // get file name bytes
 				byte[] tmode = transferMode.getBytes(); // get transfer mode bytes
-				byte[] curBlockNumber = new byte[] { 0, 0 }; //the current sent block number
-				byte[] recBlockNumber;//block number received in ACK
+				byte[] curBlockNumber = new byte[] { 0, 0 }; // the current sent block number
+				byte[] recBlockNumber;// block number received in ACK
 				byte[] dataBuf;// data buffer
-				int blockCount = 1;//current block number in int
-				
-				
-				
-				
+				int blockCount = 1;// current block number in int
+
 				// this "should" concatenate all of the pieces together for the get request
 				byte[] buf = RQconcat(opcode, fname, tmode);
-	
+
 				sendBuffer(socket, buf, 69); // send the request packet on port 69
-				
-				buf = receivePacket(socket);//Receive ACK
-				
-				//Get ACK info
+
+				buf = receivePacket(socket);// Receive ACK
+
+				// Get ACK info
 				opcode = Arrays.copyOfRange(buf, 0, 2);
 				recBlockNumber = Arrays.copyOfRange(buf, 2, 4);
-				
-				
-				//check if ACK is correct then start sending data
+
+				// check if ACK is correct then start sending data
 				if (Arrays.equals(opcode, OP.ACK.code()) && Arrays.equals(recBlockNumber, curBlockNumber)) {
 					// send
-					
-					//set up parameters for first send
+
+					// set up parameters for first send
 					Boolean moreData = true;
-					curBlockNumber = new byte[] {0,(byte) blockCount};
-					
-					//Send loop
-					while(moreData) {
-						
-						if(filecontent.length > 511) {
+					curBlockNumber = new byte[] { 0, (byte) blockCount };
+
+					// Send loop
+					while (moreData) {
+
+						if (filecontent.length > 511) {
 							dataBuf = new byte[512];// data buffer is 512 bytes
-						}
-						else {
+						} else {
 							dataBuf = new byte[filecontent.length];// data buffer is less than 512 bytes
 						}
-						
-						
-						//Get opcode and data to send
+
+						// Get opcode and data to send
 						opcode = OP.DATA.code();
 						System.arraycopy(filecontent, 0, dataBuf, 0, dataBuf.length);
 						buf = concat(concat(opcode, curBlockNumber), dataBuf);
-						
-						//Send Data
+
+						// Send Data
 						sendBuffer(socket, buf, inboundPacket.getPort());
-						
-						//Get ACK
+
+						// Get ACK
 						buf = receivePacket(socket);
-						
-						//Get Ack info
+
+						// Get Ack info
 						opcode = Arrays.copyOfRange(buf, 0, 2);
 						recBlockNumber = Arrays.copyOfRange(buf, 2, 4);
-						
-						//Check if Ack info is correct if not re-send
+
+						// Check if Ack info is correct if not re-send
 						if (Arrays.equals(opcode, OP.ACK.code()) && Arrays.equals(recBlockNumber, curBlockNumber)) {
-							
-							//if there is more data left get rid of last sent
-							if(filecontent.length -512 > 0) {
+
+							// if there is more data left get rid of last sent
+							if (filecontent.length - 512 > 0) {
 								byte[] copy = new byte[filecontent.length - 512];
 								System.arraycopy(filecontent, 512, copy, 0, copy.length);
 								filecontent = copy;
+							} else {
+								moreData = false;// if there is no more data, stop looping
 							}
-							else {
-								moreData = false;//if there is no more data, stop looping
+
+							blockCount++;
+							if (blockCount > 65535) {// rollover currently not working in our tests
+								blockCount = 0;
 							}
-							
-							blockCount ++;
-							curBlockNumber = new byte[] {0,(byte) blockCount};//not sure if we need to prepare it for more than 127 blocks...
+							int curBlockNumberLeft = blockCount / 256;
+							int curBlockNumberRight = blockCount % 256; // separate block number into 2 digits
+							curBlockNumber = new byte[] { (byte) curBlockNumberLeft, (byte) curBlockNumberRight };
+						} else {
+							System.out.println("Error Received when ACK expected. Assume file is incomplete");
+							System.out.println("Error: "); // indicate error
+							byte[] errorMsgBuf = new byte[512]; // prepare to process the message
+							Arrays.fill(errorMsgBuf, (byte) -1);
+							errorMsgBuf = Arrays.copyOfRange(buf, 4, buf.length); // copy the message over
+							for (int i = 0; i < errorMsgBuf.length; i++) { // loop through the length of the message
+								if (errorMsgBuf[i] != (byte) -1) // and print it out in readable characters
+									System.out.print((char) errorMsgBuf[i]);
+							}
+							TFTP.exit(true); // close the program with exit message
 						}
 					}
 				}
-					
+
 			} catch (SocketException e) {
 				// TODO Auto-generated catch block
 				System.out.println("Error opening socket.");
@@ -261,7 +268,7 @@ public class Client {
 			System.out.println("Failed to read local source file.");
 			TFTP.exit(true);
 		}
-			
+
 		return true; // return true if succeeded, false if failed
 	}
 
@@ -284,10 +291,13 @@ public class Client {
 		Arrays.fill(buf, (byte) 0b11111111); // new byte[1024];
 		inboundPacket = new DatagramPacket(buf, buf.length, host, socket.getLocalPort());
 		try {
+			socket.setSoTimeout(5000);
 			socket.receive(inboundPacket);
+		} catch (SocketTimeoutException e) {
+			System.out.println("Timeout receiving packet. Recovery not yet implemented.");
+			TFTP.exit(true);
 		} catch (IOException e) {
 			System.out.println("Error receiving packet.");
-			e.printStackTrace();
 			TFTP.exit(true);
 		}
 		return inboundPacket.getData();
