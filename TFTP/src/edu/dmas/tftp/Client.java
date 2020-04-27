@@ -131,6 +131,18 @@ public class Client {
 					// we decided not to implement this because it's quite difficult to test without
 					// a server we have complete control over, like one we coded ourselves. As such
 					// we deemed it outside the scope of this assignment
+					System.out.println("Error Received when ACK expected. Assume file is incomplete");
+					System.out.println("Error: "); // indicate error
+					byte[] errorMsgBuf = new byte[512]; // prepare to process the message
+					// Arrays.fill(errorMsgBuf, (byte) -1);
+					errorMsgBuf = Arrays.copyOfRange(buf, 4, buf.length); // copy the message over
+					for (int i = 0; i < errorMsgBuf.length; i++) { // loop through the length of the message
+						if (errorMsgBuf[i] != (byte) 0b11111111) // and print it out in readable characters
+							System.out.print((char) errorMsgBuf[i]);
+					}
+					System.out.println();
+					TFTP.exit(true); // close the program with exit message
+
 				}
 
 			}
@@ -243,7 +255,8 @@ public class Client {
 							int curBlockNumberRight = blockCount % 256; // separate block number into 2 digits
 							curBlockNumber = new byte[] { (byte) curBlockNumberLeft, (byte) curBlockNumberRight };
 						} else {
-							System.out.println("Error Received when ACK expected. Assume file is incomplete");
+							System.out.println(
+									"Error Received when ACK expected, or ACK out of order. Assume file is incomplete");
 							System.out.println("Error: "); // indicate error
 							byte[] errorMsgBuf = new byte[512]; // prepare to process the message
 							Arrays.fill(errorMsgBuf, (byte) -1);
@@ -252,6 +265,7 @@ public class Client {
 								if (errorMsgBuf[i] != (byte) -1) // and print it out in readable characters
 									System.out.print((char) errorMsgBuf[i]);
 							}
+							System.out.println();
 							TFTP.exit(true); // close the program with exit message
 						}
 					}
@@ -291,7 +305,7 @@ public class Client {
 		Arrays.fill(buf, (byte) 0b11111111); // new byte[1024];
 		inboundPacket = new DatagramPacket(buf, buf.length, host, socket.getLocalPort());
 		try {
-			socket.setSoTimeout(5000);
+			socket.setSoTimeout(10000);
 			socket.receive(inboundPacket);
 		} catch (SocketTimeoutException e) {
 			System.out.println("Timeout receiving packet. Recovery not yet implemented.");
